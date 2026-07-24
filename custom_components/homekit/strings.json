@@ -10,12 +10,13 @@
       },
       "user": {
         "data": {
+          "include_exclude_mode": "Inclusion mode",
           "include_domains": "Domains to include",
-          "areas": "Areas to include",
-          "labels": "Labels to include"
+          "areas": "Areas",
+          "labels": "Labels"
         },
-        "description": "Choose the domains to be included. Optionally limit them to entities in selected areas or with selected labels. All supported entities in the domain will be included except for categorized entities when no area or label is selected. A separate HomeKit instance in accessory mode will be created for each tv/receiver media player, activity based remote, lock, and camera.",
-        "title": "Select domains to be included"
+        "description": "Choose the domains that form the bridge scope, then optionally select areas and labels. In Include mode, only matching entities from the selected domains are included. In Exclude mode, matching entities are removed from the selected domains. A separate HomeKit instance in accessory mode will be created for each tv/receiver media player, activity based remote, lock, and camera.",
+        "title": "Select bridge filters"
       }
     }
   },
@@ -48,29 +49,27 @@
       },
       "exclude": {
         "data": {
-          "entities": "[%key:component::homekit::options::step::include::data::entities%]",
-          "areas": "Areas",
-          "labels": "Labels"
+          "entities": "[%key:component::homekit::options::step::include::data::entities%]"
         },
-        "description": "All “{domains}” entities will be included except for entities selected directly, through an area, or through a label, and categorized entities.",
+        "description": "All “{domains}” entities will be included except for entities selected here or matched by the areas and labels selected on the previous screen, and categorized entities.",
         "title": "Select the entities to be excluded"
       },
       "include": {
         "data": {
-          "entities": "Entities",
-          "areas": "Areas",
-          "labels": "Labels"
+          "entities": "Entities"
         },
-        "description": "Select entities, areas, or labels from “{domains}”. Areas and labels limit all selected domains to matching entities. If no area or label is selected, the include will cover an entire domain when no entities from that domain are selected.",
+        "description": "Select individual entities from “{domains}”. These are combined with the areas and labels selected on the previous screen. If no entity, area, or label is selected, the include will cover the selected domains.",
         "title": "Select the entities to be included"
       },
       "init": {
         "data": {
           "domains": "[%key:component::homekit::config::step::user::data::include_domains%]",
+          "areas": "Areas",
           "include_exclude_mode": "Inclusion mode",
+          "labels": "Labels",
           "mode": "HomeKit mode"
         },
-        "description": "HomeKit can be configured to expose a bridge or a single accessory. In accessory mode, only a single entity can be used. Accessory mode is required for media players with the TV or RECEIVER device class to function properly. Entities in the “Domains to include” will be included to HomeKit. You will be able to select which entities to include or exclude from this list on the next screen.",
+        "description": "HomeKit can expose a bridge or a single accessory. In bridge mode, choose the domains that form the scope and optionally select areas and labels. Inclusion mode determines whether the selected areas, labels, and the entities on the next screen are included or excluded. In accessory mode, only a single entity can be used.",
         "title": "Select mode and domains."
       },
       "yaml": {

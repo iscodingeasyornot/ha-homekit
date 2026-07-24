@@ -38,9 +38,11 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant, callback, split_entity_id
 from homeassistant.helpers import (
+    area_registry as ar,
     config_validation as cv,
     device_registry as dr,
     entity_registry as er,
+    label_registry as lr,
     selector,
 )
 from homeassistant.helpers.target import (
@@ -265,14 +267,36 @@ def _async_store_area_label_selection(
     options: dict[str, Any], user_input: dict[str, Any]
 ) -> tuple[list[str], list[str]]:
     """Store area and label selections outside the legacy entity filter."""
-    areas = cv.ensure_list(user_input.get(CONF_AREAS, []))
-    labels = cv.ensure_list(user_input.get(CONF_LABELS, []))
+    areas = cv.ensure_list(user_input.get(CONF_AREAS, options.get(CONF_AREAS, [])))
+    labels = cv.ensure_list(user_input.get(CONF_LABELS, options.get(CONF_LABELS, [])))
     for key, value in ((CONF_AREAS, areas), (CONF_LABELS, labels)):
         if value:
             options[key] = value
         else:
             options.pop(key, None)
     return areas, labels
+
+
+@callback
+def _async_area_choices(hass: HomeAssistant) -> dict[str, str]:
+    """Return areas sorted by name for a multi-select field."""
+    return {
+        entry.id: entry.name
+        for entry in sorted(
+            ar.async_get(hass).async_list_areas(), key=lambda entry: entry.name
+        )
+    }
+
+
+@callback
+def _async_label_choices(hass: HomeAssistant) -> dict[str, str]:
+    """Return labels sorted by name for a multi-select field."""
+    return {
+        entry.label_id: entry.name
+        for entry in sorted(
+            lr.async_get(hass).async_list_labels(), key=lambda entry: entry.name
+        )
+    }
 
 
 @callback
@@ -346,13 +370,24 @@ class HomeKitConfigFlow(ConfigFlow, domain=DOMAIN):
         """Choose specific domains in bridge mode."""
         if user_input is not None:
             domains = user_input[CONF_INCLUDE_DOMAINS]
+            include_exclude_mode = user_input[CONF_INCLUDE_EXCLUDE_MODE]
             areas, labels = _async_store_area_label_selection(self.hk_data, user_input)
             _async_store_selected_entities(self.hk_data, domains, [], areas, labels)
-            self.hk_data[CONF_FILTER] = (
-                _async_build_target_filter(self.hass, domains, [], areas, labels)
-                if areas or labels
-                else _make_entity_filter(include_domains=domains)
-            )
+            if include_exclude_mode == MODE_EXCLUDE:
+                self.hk_data[CONF_FILTER] = _async_build_target_filter(
+                    self.hass,
+                    domains,
+                    [],
+                    areas,
+                    labels,
+                    exclude=True,
+                )
+            else:
+                self.hk_data[CONF_FILTER] = (
+                    _async_build_target_filter(self.hass, domains, [], areas, labels)
+                    if areas or labels
+                    else _make_entity_filter(include_domains=domains)
+                )
             return await self.async_step_pairing()
 
         self.hk_data[CONF_HOMEKIT_MODE] = HOMEKIT_MODE_BRIDGE
@@ -365,13 +400,16 @@ class HomeKitConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required(
+                        CONF_INCLUDE_EXCLUDE_MODE, default=MODE_INCLUDE
+                    ): vol.In(INCLUDE_EXCLUDE_MODES),
+                    vol.Required(
                         CONF_INCLUDE_DOMAINS, default=default_domains
                     ): cv.multi_select(name_to_type_map),
-                    vol.Optional(CONF_AREAS): selector.AreaSelector(
-                        selector.AreaSelectorConfig(multiple=True)
+                    vol.Optional(CONF_AREAS): cv.multi_select(
+                        _async_area_choices(self.hass)
                     ),
-                    vol.Optional(CONF_LABELS): selector.LabelSelector(
-                        selector.LabelSelectorConfig(multiple=True)
+                    vol.Optional(CONF_LABELS): cv.multi_select(
+                        _async_label_choices(self.hass)
                     ),
                 }
             ),
@@ -414,6 +452,7 @@ class HomeKitConfigFlow(ConfigFlow, domain=DOMAIN):
             self.hass,
             config_filter[CONF_INCLUDE_DOMAINS],
             config_filter[CONF_INCLUDE_ENTITIES],
+            config_filter[CONF_EXCLUDE_ENTITIES],
         )
         exiting_entity_ids_accessory_mode = _async_entity_ids_with_accessory_mode(
             self.hass
@@ -818,15 +857,6 @@ class OptionsFlowHandler(OptionsFlow):
                             include_entities=all_supported_entities,
                         )
                     ),
-                    _selection_schema_key(CONF_AREAS, areas): selector.AreaSelector(
-                        selector.AreaSelectorConfig(
-                            multiple=True,
-                            entity={"domain": domains},
-                        )
-                    ),
-                    _selection_schema_key(CONF_LABELS, labels): selector.LabelSelector(
-                        selector.LabelSelectorConfig(multiple=True)
-                    ),
                 }
             ),
         )
@@ -897,15 +927,6 @@ class OptionsFlowHandler(OptionsFlow):
                             include_entities=all_supported_entities,
                         )
                     ),
-                    _selection_schema_key(CONF_AREAS, areas): selector.AreaSelector(
-                        selector.AreaSelectorConfig(
-                            multiple=True,
-                            entity={"domain": domains},
-                        )
-                    ),
-                    _selection_schema_key(CONF_LABELS, labels): selector.LabelSelector(
-                        selector.LabelSelectorConfig(multiple=True)
-                    ),
                 }
             ),
         )
@@ -956,6 +977,8 @@ class OptionsFlowHandler(OptionsFlow):
                 )
             )
         name_to_type_map = await _async_name_to_type_map(self.hass)
+        areas = self.hk_options.get(CONF_AREAS, [])
+        labels = self.hk_options.get(CONF_LABELS, [])
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
@@ -970,6 +993,12 @@ class OptionsFlowHandler(OptionsFlow):
                         CONF_DOMAINS,
                         default=domains,
                     ): cv.multi_select(name_to_type_map),
+                    _selection_schema_key(CONF_AREAS, areas): cv.multi_select(
+                        _async_area_choices(self.hass)
+                    ),
+                    _selection_schema_key(CONF_LABELS, labels): cv.multi_select(
+                        _async_label_choices(self.hass)
+                    ),
                 }
             ),
         )
@@ -1034,6 +1063,7 @@ def _async_get_entity_ids_for_accessory_mode(
     hass: HomeAssistant,
     include_domains: Iterable[str],
     include_entities: Iterable[str] = (),
+    exclude_entities: Iterable[str] = (),
 ) -> list[str]:
     """Build a list of entities that should be paired in accessory mode."""
     accessory_mode_domains = {
@@ -1041,6 +1071,7 @@ def _async_get_entity_ids_for_accessory_mode(
     }
 
     accessory_mode_entities = set(include_entities)
+    excluded_entities = set(exclude_entities)
     if not accessory_mode_domains and not accessory_mode_entities:
         return []
 
@@ -1051,6 +1082,7 @@ def _async_get_entity_ids_for_accessory_mode(
             state.domain in accessory_mode_domains
             or state.entity_id in accessory_mode_entities
         )
+        and state.entity_id not in excluded_entities
         and state_needs_accessory_mode(state)
     ]
 
