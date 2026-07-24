@@ -1008,7 +1008,13 @@ class OptionsFlowHandler(OptionsFlow):
             return await self.async_step_yaml(user_input)
 
         if user_input is not None:
-            self.hk_options.update(user_input)
+            flat_input = dict(user_input)
+            domain_filter = flat_input.pop(SECTION_DOMAIN_FILTER)
+            area_filter = flat_input.pop(SECTION_AREA_FILTER)
+            label_filter = flat_input.pop(SECTION_LABEL_FILTER)
+            self.hk_options.update(
+                flat_input | domain_filter | area_filter | label_filter
+            )
             if self.hk_options.get(CONF_HOMEKIT_MODE) == HOMEKIT_MODE_ACCESSORY:
                 for key in (
                     CONF_AREAS,
@@ -1021,7 +1027,7 @@ class OptionsFlowHandler(OptionsFlow):
                 ):
                     self.hk_options.pop(key, None)
                 return await self.async_step_accessory()
-            if user_input[CONF_DOMAINS_INCLUSION_MODE] == MODE_INCLUDE:
+            if domain_filter[CONF_DOMAINS_INCLUSION_MODE] == MODE_INCLUDE:
                 return await self.async_step_include()
             return await self.async_step_exclude()
 
@@ -1095,24 +1101,43 @@ class OptionsFlowHandler(OptionsFlow):
                     vol.Required(CONF_HOMEKIT_MODE, default=homekit_mode): vol.In(
                         HOMEKIT_MODES
                     ),
-                    vol.Required(
-                        CONF_DOMAINS_INCLUSION_MODE, default=domains_mode
-                    ): vol.In(INCLUDE_EXCLUDE_MODES),
-                    vol.Required(
-                        CONF_DOMAINS,
-                        default=domains,
-                    ): cv.multi_select(name_to_type_map),
-                    vol.Required(CONF_AREAS_INCLUSION_MODE, default=areas_mode): vol.In(
-                        INCLUDE_EXCLUDE_MODES
+                    vol.Required(SECTION_DOMAIN_FILTER): section(
+                        vol.Schema(
+                            {
+                                vol.Required(
+                                    CONF_DOMAINS_INCLUSION_MODE,
+                                    default=domains_mode,
+                                ): vol.In(INCLUDE_EXCLUDE_MODES),
+                                vol.Required(
+                                    CONF_DOMAINS,
+                                    default=domains,
+                                ): cv.multi_select(name_to_type_map),
+                            }
+                        )
                     ),
-                    _selection_schema_key(CONF_AREAS, areas): cv.multi_select(
-                        _async_area_choices(self.hass)
+                    vol.Required(SECTION_AREA_FILTER): section(
+                        vol.Schema(
+                            {
+                                vol.Required(
+                                    CONF_AREAS_INCLUSION_MODE, default=areas_mode
+                                ): vol.In(INCLUDE_EXCLUDE_MODES),
+                                _selection_schema_key(
+                                    CONF_AREAS, areas
+                                ): cv.multi_select(_async_area_choices(self.hass)),
+                            }
+                        )
                     ),
-                    vol.Required(
-                        CONF_LABELS_INCLUSION_MODE, default=labels_mode
-                    ): vol.In(INCLUDE_EXCLUDE_MODES),
-                    _selection_schema_key(CONF_LABELS, labels): cv.multi_select(
-                        _async_label_choices(self.hass)
+                    vol.Required(SECTION_LABEL_FILTER): section(
+                        vol.Schema(
+                            {
+                                vol.Required(
+                                    CONF_LABELS_INCLUSION_MODE, default=labels_mode
+                                ): vol.In(INCLUDE_EXCLUDE_MODES),
+                                _selection_schema_key(
+                                    CONF_LABELS, labels
+                                ): cv.multi_select(_async_label_choices(self.hass)),
+                            }
+                        )
                     ),
                 }
             ),

@@ -29,5 +29,39 @@
                 "title": "选择桥接筛选条件"
             }
         }
+    },
+    "options": {
+        "step": {
+            "init": {
+                "data": {
+                    "mode": "HomeKit 模式"
+                },
+                "description": "HomeKit 可以公开一个桥接器或单个配件。在桥接模式下，域、区域和标签均有各自的包含或排除模式。下一屏选择的单个实体使用域模式。在配件模式下，只能使用一个实体。",
+                "sections": {
+                    "area_filter": {
+                        "data": {
+                            "areas": "区域",
+                            "areas_inclusion_mode": "包含模式"
+                        },
+                        "name": "区域"
+                    },
+                    "domain_filter": {
+                        "data": {
+                            "domains": "域",
+                            "domains_inclusion_mode": "包含模式"
+                        },
+                        "name": "域"
+                    },
+                    "label_filter": {
+                        "data": {
+                            "labels": "标签",
+                            "labels_inclusion_mode": "包含模式"
+                        },
+                        "name": "标签"
+                    }
+                },
+                "title": "选择模式和域"
+            }
+        }
     }
 }

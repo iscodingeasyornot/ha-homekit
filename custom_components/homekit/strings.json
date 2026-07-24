@@ -80,15 +80,32 @@
       },
       "init": {
         "data": {
-          "domains_inclusion_mode": "Domains inclusion mode",
-          "domains": "Domains",
-          "areas_inclusion_mode": "Areas inclusion mode",
-          "areas": "Areas",
-          "labels_inclusion_mode": "Labels inclusion mode",
-          "labels": "Labels",
           "mode": "HomeKit mode"
         },
         "description": "HomeKit can expose a bridge or a single accessory. In bridge mode, domains, areas, and labels each have their own Include or Exclude mode. The individual entities selected on the next screen use the domains mode. In accessory mode, only a single entity can be used.",
+        "sections": {
+          "domain_filter": {
+            "data": {
+              "domains_inclusion_mode": "Inclusion mode",
+              "domains": "Domains"
+            },
+            "name": "Domains"
+          },
+          "area_filter": {
+            "data": {
+              "areas_inclusion_mode": "Inclusion mode",
+              "areas": "Areas"
+            },
+            "name": "Areas"
+          },
+          "label_filter": {
+            "data": {
+              "labels_inclusion_mode": "Inclusion mode",
+              "labels": "Labels"
+            },
+            "name": "Labels"
+          }
+        },
         "title": "Select mode and domains."
       },
       "yaml": {
