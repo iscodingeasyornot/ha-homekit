@@ -36,11 +36,13 @@ ATTR_OBSTRUCTION_DETECTED = "obstruction-detected"
 
 # #### Config ####
 CONF_HOMEKIT_MODE = "mode"
+CONF_DOMAINS_INCLUSION_MODE = "domains_inclusion_mode"
 CONF_ADVERTISE_IP = "advertise_ip"
 CONF_AUDIO_CODEC = "audio_codec"
 CONF_AUDIO_MAP = "audio_map"
 CONF_AUDIO_PACKET_SIZE = "audio_packet_size"
 CONF_AREAS = "areas"
+CONF_AREAS_INCLUSION_MODE = "areas_inclusion_mode"
 CONF_ENTITY_CONFIG = "entity_config"
 CONF_FEATURE = "feature"
 CONF_FEATURE_LIST = "feature_list"
@@ -59,6 +61,7 @@ CONF_LINKED_TEMPERATURE_SENSOR = "linked_temperature_sensor"
 CONF_LINKED_VALVE_DURATION = "linked_valve_duration"
 CONF_LINKED_VALVE_END_TIME = "linked_valve_end_time"
 CONF_LABELS = "labels"
+CONF_LABELS_INCLUSION_MODE = "labels_inclusion_mode"
 CONF_LOW_BATTERY_THRESHOLD = "low_battery_threshold"
 CONF_MAX_FPS = "max_fps"
 CONF_MAX_HEIGHT = "max_height"
@@ -326,7 +329,10 @@ CONFIG_OPTIONS = [
     CONF_HOMEKIT_MODE,
     CONF_DEVICES,
     CONF_AREAS,
+    CONF_AREAS_INCLUSION_MODE,
+    CONF_DOMAINS_INCLUSION_MODE,
     CONF_LABELS,
+    CONF_LABELS_INCLUSION_MODE,
     CONF_SELECTED_DOMAINS,
     CONF_SELECTED_ENTITIES,
 ]

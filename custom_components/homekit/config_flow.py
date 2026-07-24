@@ -49,15 +49,19 @@ from homeassistant.helpers.target import (
     TargetSelection,
     async_extract_referenced_entity_ids,
 )
+from homeassistant.helpers.entityfilter import generate_filter
 from homeassistant.loader import async_get_integrations
 
 from .const import (
     CONF_AREAS,
+    CONF_AREAS_INCLUSION_MODE,
+    CONF_DOMAINS_INCLUSION_MODE,
     CONF_ENTITY_CONFIG,
     CONF_EXCLUDE_ACCESSORY_MODE,
     CONF_FILTER,
     CONF_HOMEKIT_MODE,
     CONF_LABELS,
+    CONF_LABELS_INCLUSION_MODE,
     CONF_SELECTED_DOMAINS,
     CONF_SELECTED_ENTITIES,
     CONF_SUPPORT_AUDIO,
@@ -228,31 +232,55 @@ def _async_expand_area_label_entities(
 
 
 @callback
-def _async_build_target_filter(
+def _async_build_independent_filter(
     hass: HomeAssistant,
     domains: list[str],
     entities: list[str],
     areas: list[str],
     labels: list[str],
-    *,
-    exclude: bool = False,
+    domains_mode: str,
+    areas_mode: str,
+    labels_mode: str,
 ) -> EntityFilterDict:
-    """Build a filter, expanding selected areas and labels to entities."""
-    target_entities = entities
-    if areas or labels:
-        target_entities = sorted(
-            set(entities)
-            | set(_async_expand_area_label_entities(hass, domains, areas, labels))
+    """Build a filter with an independent mode for each selector group."""
+    include_domains = list(domains) if domains_mode == MODE_INCLUDE else []
+    exclude_domains = list(domains) if domains_mode == MODE_EXCLUDE else []
+    include_entities = list(entities) if domains_mode == MODE_INCLUDE else []
+    exclude_entities = list(entities) if domains_mode == MODE_EXCLUDE else []
+
+    area_entities = _async_expand_area_label_entities(
+        hass, SUPPORTED_DOMAINS, areas, []
+    )
+    label_entities = _async_expand_area_label_entities(
+        hass, SUPPORTED_DOMAINS, [], labels
+    )
+    for mode, matching_entities in (
+        (areas_mode, area_entities),
+        (labels_mode, label_entities),
+    ):
+        target = include_entities if mode == MODE_INCLUDE else exclude_entities
+        target.extend(matching_entities)
+
+    exclude_entities = sorted(set(exclude_entities))
+    # A matching exclusion wins when an entity is selected by more than one
+    # independent group.
+    include_entities = sorted(set(include_entities).difference(exclude_entities))
+    if (
+        not include_domains
+        and not include_entities
+        and (
+            (areas and areas_mode == MODE_INCLUDE)
+            or (labels and labels_mode == MODE_INCLUDE)
         )
-    if exclude:
-        return _make_entity_filter(
-            include_domains=domains, exclude_entities=target_entities
-        )
-    if areas or labels:
-        return _make_entity_filter(
-            include_entities=target_entities or [NO_MATCHING_TARGET_ENTITY]
-        )
-    return _async_build_entities_filter(domains, target_entities)
+    ):
+        include_entities = [NO_MATCHING_TARGET_ENTITY]
+
+    return _make_entity_filter(
+        include_domains=include_domains,
+        include_entities=include_entities,
+        exclude_domains=exclude_domains,
+        exclude_entities=exclude_entities,
+    )
 
 
 def _selection_schema_key(key: str, current: list[str]) -> vol.Optional:
@@ -326,20 +354,21 @@ def _async_entities_in_domain(entities: list[str], domain: str) -> list[str]:
 
 
 @callback
-def _async_included_domain_entities(
-    hass: HomeAssistant,
-    entity_filter: EntityFilterDict,
-    entities: list[str],
-    domain: str,
+def _async_filtered_domain_entities(
+    hass: HomeAssistant, entity_filter: EntityFilterDict, domain: str
 ) -> list[str]:
-    """Return a domain's included entities, expanding a whole domain include.
-
-    The whole domain is included when none of its entities are selected
-    explicitly.
-    """
-    if domain in entity_filter[CONF_INCLUDE_DOMAINS]:
-        return _async_get_matching_entities(hass, [domain])
-    return _async_entities_in_domain(entities, domain)
+    """Return supported entities in a domain that pass the complete filter."""
+    entity_is_included = generate_filter(
+        entity_filter[CONF_INCLUDE_DOMAINS],
+        entity_filter[CONF_INCLUDE_ENTITIES],
+        entity_filter[CONF_EXCLUDE_DOMAINS],
+        entity_filter[CONF_EXCLUDE_ENTITIES],
+    )
+    return [
+        entity_id
+        for entity_id in _async_get_matching_entities(hass, [domain])
+        if entity_is_included(entity_id)
+    ]
 
 
 async def _async_name_to_type_map(hass: HomeAssistant) -> dict[str, str]:
@@ -370,24 +399,28 @@ class HomeKitConfigFlow(ConfigFlow, domain=DOMAIN):
         """Choose specific domains in bridge mode."""
         if user_input is not None:
             domains = user_input[CONF_INCLUDE_DOMAINS]
-            include_exclude_mode = user_input[CONF_INCLUDE_EXCLUDE_MODE]
+            domains_mode = user_input[CONF_DOMAINS_INCLUSION_MODE]
+            areas_mode = user_input[CONF_AREAS_INCLUSION_MODE]
+            labels_mode = user_input[CONF_LABELS_INCLUSION_MODE]
             areas, labels = _async_store_area_label_selection(self.hk_data, user_input)
             _async_store_selected_entities(self.hk_data, domains, [], areas, labels)
-            if include_exclude_mode == MODE_EXCLUDE:
-                self.hk_data[CONF_FILTER] = _async_build_target_filter(
-                    self.hass,
-                    domains,
-                    [],
-                    areas,
-                    labels,
-                    exclude=True,
-                )
-            else:
-                self.hk_data[CONF_FILTER] = (
-                    _async_build_target_filter(self.hass, domains, [], areas, labels)
-                    if areas or labels
-                    else _make_entity_filter(include_domains=domains)
-                )
+            self.hk_data.update(
+                {
+                    CONF_DOMAINS_INCLUSION_MODE: domains_mode,
+                    CONF_AREAS_INCLUSION_MODE: areas_mode,
+                    CONF_LABELS_INCLUSION_MODE: labels_mode,
+                }
+            )
+            self.hk_data[CONF_FILTER] = _async_build_independent_filter(
+                self.hass,
+                domains,
+                [],
+                areas,
+                labels,
+                domains_mode,
+                areas_mode,
+                labels_mode,
+            )
             return await self.async_step_pairing()
 
         self.hk_data[CONF_HOMEKIT_MODE] = HOMEKIT_MODE_BRIDGE
@@ -400,14 +433,20 @@ class HomeKitConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required(
-                        CONF_INCLUDE_EXCLUDE_MODE, default=MODE_INCLUDE
+                        CONF_DOMAINS_INCLUSION_MODE, default=MODE_INCLUDE
                     ): vol.In(INCLUDE_EXCLUDE_MODES),
                     vol.Required(
                         CONF_INCLUDE_DOMAINS, default=default_domains
                     ): cv.multi_select(name_to_type_map),
+                    vol.Required(
+                        CONF_AREAS_INCLUSION_MODE, default=MODE_INCLUDE
+                    ): vol.In(INCLUDE_EXCLUDE_MODES),
                     vol.Optional(CONF_AREAS): cv.multi_select(
                         _async_area_choices(self.hass)
                     ),
+                    vol.Required(
+                        CONF_LABELS_INCLUSION_MODE, default=MODE_INCLUDE
+                    ): vol.In(INCLUDE_EXCLUDE_MODES),
                     vol.Optional(CONF_LABELS): cv.multi_select(
                         _async_label_choices(self.hass)
                     ),
@@ -452,6 +491,7 @@ class HomeKitConfigFlow(ConfigFlow, domain=DOMAIN):
             self.hass,
             config_filter[CONF_INCLUDE_DOMAINS],
             config_filter[CONF_INCLUDE_ENTITIES],
+            config_filter[CONF_EXCLUDE_DOMAINS],
             config_filter[CONF_EXCLUDE_ENTITIES],
         )
         exiting_entity_ids_accessory_mode = _async_entity_ids_with_accessory_mode(
@@ -815,15 +855,21 @@ class OptionsFlowHandler(OptionsFlow):
             entities = cv.ensure_list(user_input[CONF_ENTITIES])
             areas, labels = _async_store_area_label_selection(hk_options, user_input)
             _async_store_selected_entities(hk_options, domains, entities, areas, labels)
-            entity_filter = _async_build_target_filter(
-                self.hass, domains, entities, areas, labels
+            entity_filter = _async_build_independent_filter(
+                self.hass,
+                domains,
+                entities,
+                areas,
+                labels,
+                hk_options[CONF_DOMAINS_INCLUSION_MODE],
+                hk_options[CONF_AREAS_INCLUSION_MODE],
+                hk_options[CONF_LABELS_INCLUSION_MODE],
             )
-            filtered_entities = entity_filter[CONF_INCLUDE_ENTITIES]
-            self.included_cameras = _async_included_domain_entities(
-                self.hass, entity_filter, filtered_entities, CAMERA_DOMAIN
+            self.included_cameras = _async_filtered_domain_entities(
+                self.hass, entity_filter, CAMERA_DOMAIN
             )
-            self.included_climates = _async_included_domain_entities(
-                self.hass, entity_filter, filtered_entities, CLIMATE_DOMAIN
+            self.included_climates = _async_filtered_domain_entities(
+                self.hass, entity_filter, CLIMATE_DOMAIN
             )
             hk_options[CONF_FILTER] = entity_filter
             return await self.async_step_cameras()
@@ -872,27 +918,22 @@ class OptionsFlowHandler(OptionsFlow):
             entities = cv.ensure_list(user_input[CONF_ENTITIES])
             areas, labels = _async_store_area_label_selection(hk_options, user_input)
             _async_store_selected_entities(hk_options, domains, entities, areas, labels)
-            entity_filter = _async_build_target_filter(
+            entity_filter = _async_build_independent_filter(
                 self.hass,
                 domains,
                 entities,
                 areas,
                 labels,
-                exclude=True,
+                hk_options[CONF_DOMAINS_INCLUSION_MODE],
+                hk_options[CONF_AREAS_INCLUSION_MODE],
+                hk_options[CONF_LABELS_INCLUSION_MODE],
             )
-            entities = entity_filter[CONF_EXCLUDE_ENTITIES]
-
-            def _remaining_in_domain(domain: str) -> list[str]:
-                if domain not in domains:
-                    return []
-                return [
-                    entity_id
-                    for entity_id in _async_get_matching_entities(self.hass, [domain])
-                    if entity_id not in entities
-                ]
-
-            self.included_cameras = _remaining_in_domain(CAMERA_DOMAIN)
-            self.included_climates = _remaining_in_domain(CLIMATE_DOMAIN)
+            self.included_cameras = _async_filtered_domain_entities(
+                self.hass, entity_filter, CAMERA_DOMAIN
+            )
+            self.included_climates = _async_filtered_domain_entities(
+                self.hass, entity_filter, CLIMATE_DOMAIN
+            )
             hk_options[CONF_FILTER] = entity_filter
             return await self.async_step_cameras()
 
@@ -943,24 +984,39 @@ class OptionsFlowHandler(OptionsFlow):
             if self.hk_options.get(CONF_HOMEKIT_MODE) == HOMEKIT_MODE_ACCESSORY:
                 for key in (
                     CONF_AREAS,
+                    CONF_AREAS_INCLUSION_MODE,
+                    CONF_DOMAINS_INCLUSION_MODE,
                     CONF_LABELS,
+                    CONF_LABELS_INCLUSION_MODE,
                     CONF_SELECTED_DOMAINS,
                     CONF_SELECTED_ENTITIES,
                 ):
                     self.hk_options.pop(key, None)
                 return await self.async_step_accessory()
-            if user_input[CONF_INCLUDE_EXCLUDE_MODE] == MODE_INCLUDE:
+            if user_input[CONF_DOMAINS_INCLUSION_MODE] == MODE_INCLUDE:
                 return await self.async_step_include()
             return await self.async_step_exclude()
 
         self.hk_options = deepcopy(dict(self.config_entry.options))
         homekit_mode = self.hk_options.get(CONF_HOMEKIT_MODE, DEFAULT_HOMEKIT_MODE)
         entity_filter: EntityFilterDict = self.hk_options.get(CONF_FILTER, {})
-        include_exclude_mode = MODE_INCLUDE
-        entities = entity_filter.get(CONF_INCLUDE_ENTITIES, [])
-        if homekit_mode != HOMEKIT_MODE_ACCESSORY:
-            include_exclude_mode = MODE_INCLUDE if entities else MODE_EXCLUDE
-        domains = list(entity_filter.get(CONF_INCLUDE_DOMAINS, []))
+        include_entities = entity_filter.get(CONF_INCLUDE_ENTITIES, [])
+        exclude_entities = entity_filter.get(CONF_EXCLUDE_ENTITIES, [])
+        domains_mode = self.hk_options.get(
+            CONF_DOMAINS_INCLUSION_MODE,
+            MODE_EXCLUDE
+            if entity_filter.get(CONF_EXCLUDE_DOMAINS)
+            and not entity_filter.get(CONF_INCLUDE_DOMAINS)
+            else MODE_INCLUDE,
+        )
+        domains = list(
+            entity_filter.get(
+                CONF_INCLUDE_DOMAINS
+                if domains_mode == MODE_INCLUDE
+                else CONF_EXCLUDE_DOMAINS,
+                [],
+            )
+        )
         has_target_selection = bool(
             self.hk_options.get(CONF_AREAS) or self.hk_options.get(CONF_LABELS)
         )
@@ -968,7 +1024,7 @@ class OptionsFlowHandler(OptionsFlow):
             selected_domains := self.hk_options.get(CONF_SELECTED_DOMAINS)
         ):
             domains = selected_domains
-        elif include_entities := entity_filter.get(CONF_INCLUDE_ENTITIES):
+        elif include_entities:
             domains.extend(
                 _domains_set_from_entities(
                     entity_id
@@ -979,6 +1035,28 @@ class OptionsFlowHandler(OptionsFlow):
         name_to_type_map = await _async_name_to_type_map(self.hass)
         areas = self.hk_options.get(CONF_AREAS, [])
         labels = self.hk_options.get(CONF_LABELS, [])
+        area_entities = set(
+            _async_expand_area_label_entities(self.hass, SUPPORTED_DOMAINS, areas, [])
+        )
+        label_entities = set(
+            _async_expand_area_label_entities(self.hass, SUPPORTED_DOMAINS, [], labels)
+        )
+        areas_mode = self.hk_options.get(
+            CONF_AREAS_INCLUSION_MODE,
+            MODE_EXCLUDE
+            if area_entities
+            and area_entities.issubset(exclude_entities)
+            and not area_entities.intersection(include_entities)
+            else MODE_INCLUDE,
+        )
+        labels_mode = self.hk_options.get(
+            CONF_LABELS_INCLUSION_MODE,
+            MODE_EXCLUDE
+            if label_entities
+            and label_entities.issubset(exclude_entities)
+            and not label_entities.intersection(include_entities)
+            else MODE_INCLUDE,
+        )
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(
@@ -987,15 +1065,21 @@ class OptionsFlowHandler(OptionsFlow):
                         HOMEKIT_MODES
                     ),
                     vol.Required(
-                        CONF_INCLUDE_EXCLUDE_MODE, default=include_exclude_mode
+                        CONF_DOMAINS_INCLUSION_MODE, default=domains_mode
                     ): vol.In(INCLUDE_EXCLUDE_MODES),
                     vol.Required(
                         CONF_DOMAINS,
                         default=domains,
                     ): cv.multi_select(name_to_type_map),
+                    vol.Required(CONF_AREAS_INCLUSION_MODE, default=areas_mode): vol.In(
+                        INCLUDE_EXCLUDE_MODES
+                    ),
                     _selection_schema_key(CONF_AREAS, areas): cv.multi_select(
                         _async_area_choices(self.hass)
                     ),
+                    vol.Required(
+                        CONF_LABELS_INCLUSION_MODE, default=labels_mode
+                    ): vol.In(INCLUDE_EXCLUDE_MODES),
                     _selection_schema_key(CONF_LABELS, labels): cv.multi_select(
                         _async_label_choices(self.hass)
                     ),
@@ -1063,26 +1147,27 @@ def _async_get_entity_ids_for_accessory_mode(
     hass: HomeAssistant,
     include_domains: Iterable[str],
     include_entities: Iterable[str] = (),
+    exclude_domains: Iterable[str] = (),
     exclude_entities: Iterable[str] = (),
 ) -> list[str]:
     """Build a list of entities that should be paired in accessory mode."""
-    accessory_mode_domains = {
-        domain for domain in include_domains if domain in DOMAINS_NEED_ACCESSORY_MODE
-    }
-
+    include_domains = list(include_domains)
     accessory_mode_entities = set(include_entities)
-    excluded_entities = set(exclude_entities)
-    if not accessory_mode_domains and not accessory_mode_entities:
-        return []
+    entity_is_included = generate_filter(
+        include_domains,
+        list(accessory_mode_entities),
+        list(exclude_domains),
+        list(exclude_entities),
+    )
 
     return [
         state.entity_id
         for state in hass.states.async_all()
         if (
-            state.domain in accessory_mode_domains
+            state.domain in DOMAINS_NEED_ACCESSORY_MODE
             or state.entity_id in accessory_mode_entities
         )
-        and state.entity_id not in excluded_entities
+        and entity_is_included(state.entity_id)
         and state_needs_accessory_mode(state)
     ]
 

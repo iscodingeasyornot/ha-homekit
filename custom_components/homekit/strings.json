@@ -10,12 +10,14 @@
       },
       "user": {
         "data": {
-          "include_exclude_mode": "Inclusion mode",
-          "include_domains": "Domains to include",
+          "domains_inclusion_mode": "Domains inclusion mode",
+          "include_domains": "Domains",
+          "areas_inclusion_mode": "Areas inclusion mode",
           "areas": "Areas",
+          "labels_inclusion_mode": "Labels inclusion mode",
           "labels": "Labels"
         },
-        "description": "Choose the domains that form the bridge scope, then optionally select areas and labels. In Include mode, only matching entities from the selected domains are included. In Exclude mode, matching entities are removed from the selected domains. A separate HomeKit instance in accessory mode will be created for each tv/receiver media player, activity based remote, lock, and camera.",
+        "description": "Choose Include or Exclude independently for domains, areas, and labels. The selector immediately below each inclusion mode belongs to that mode. A separate HomeKit instance in accessory mode will be created for each tv/receiver media player, activity based remote, lock, and camera.",
         "title": "Select bridge filters"
       }
     }
@@ -63,13 +65,15 @@
       },
       "init": {
         "data": {
-          "domains": "[%key:component::homekit::config::step::user::data::include_domains%]",
+          "domains_inclusion_mode": "[%key:component::homekit::config::step::user::data::domains_inclusion_mode%]",
+          "domains": "Domains",
+          "areas_inclusion_mode": "[%key:component::homekit::config::step::user::data::areas_inclusion_mode%]",
           "areas": "Areas",
-          "include_exclude_mode": "Inclusion mode",
+          "labels_inclusion_mode": "[%key:component::homekit::config::step::user::data::labels_inclusion_mode%]",
           "labels": "Labels",
           "mode": "HomeKit mode"
         },
-        "description": "HomeKit can expose a bridge or a single accessory. In bridge mode, choose the domains that form the scope and optionally select areas and labels. Inclusion mode determines whether the selected areas, labels, and the entities on the next screen are included or excluded. In accessory mode, only a single entity can be used.",
+        "description": "HomeKit can expose a bridge or a single accessory. In bridge mode, domains, areas, and labels each have their own Include or Exclude mode. The individual entities selected on the next screen use the domains mode. In accessory mode, only a single entity can be used.",
         "title": "Select mode and domains."
       },
       "yaml": {
