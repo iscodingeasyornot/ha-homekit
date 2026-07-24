@@ -433,19 +433,19 @@ class HomeKitConfigFlow(ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required(
-                        CONF_DOMAINS_INCLUSION_MODE, default=MODE_INCLUDE
+                        CONF_DOMAINS_INCLUSION_MODE, default=MODE_EXCLUDE
                     ): vol.In(INCLUDE_EXCLUDE_MODES),
                     vol.Required(
                         CONF_INCLUDE_DOMAINS, default=default_domains
                     ): cv.multi_select(name_to_type_map),
                     vol.Required(
-                        CONF_AREAS_INCLUSION_MODE, default=MODE_INCLUDE
+                        CONF_AREAS_INCLUSION_MODE, default=MODE_EXCLUDE
                     ): vol.In(INCLUDE_EXCLUDE_MODES),
                     vol.Optional(CONF_AREAS): cv.multi_select(
                         _async_area_choices(self.hass)
                     ),
                     vol.Required(
-                        CONF_LABELS_INCLUSION_MODE, default=MODE_INCLUDE
+                        CONF_LABELS_INCLUSION_MODE, default=MODE_EXCLUDE
                     ): vol.In(INCLUDE_EXCLUDE_MODES),
                     vol.Optional(CONF_LABELS): cv.multi_select(
                         _async_label_choices(self.hass)
@@ -1002,12 +1002,13 @@ class OptionsFlowHandler(OptionsFlow):
         entity_filter: EntityFilterDict = self.hk_options.get(CONF_FILTER, {})
         include_entities = entity_filter.get(CONF_INCLUDE_ENTITIES, [])
         exclude_entities = entity_filter.get(CONF_EXCLUDE_ENTITIES, [])
+        selected_domains = self.hk_options.get(CONF_SELECTED_DOMAINS, [])
         domains_mode = self.hk_options.get(
             CONF_DOMAINS_INCLUSION_MODE,
-            MODE_EXCLUDE
-            if entity_filter.get(CONF_EXCLUDE_DOMAINS)
-            and not entity_filter.get(CONF_INCLUDE_DOMAINS)
-            else MODE_INCLUDE,
+            MODE_INCLUDE
+            if entity_filter.get(CONF_INCLUDE_DOMAINS)
+            or (selected_domains and include_entities)
+            else MODE_EXCLUDE,
         )
         domains = list(
             entity_filter.get(
@@ -1020,9 +1021,7 @@ class OptionsFlowHandler(OptionsFlow):
         has_target_selection = bool(
             self.hk_options.get(CONF_AREAS) or self.hk_options.get(CONF_LABELS)
         )
-        if has_target_selection and (
-            selected_domains := self.hk_options.get(CONF_SELECTED_DOMAINS)
-        ):
+        if has_target_selection and (selected_domains):
             domains = selected_domains
         elif include_entities:
             domains.extend(
@@ -1044,17 +1043,21 @@ class OptionsFlowHandler(OptionsFlow):
         areas_mode = self.hk_options.get(
             CONF_AREAS_INCLUSION_MODE,
             MODE_EXCLUDE
-            if area_entities
-            and area_entities.issubset(exclude_entities)
-            and not area_entities.intersection(include_entities)
+            if not area_entities
+            or (
+                area_entities.issubset(exclude_entities)
+                and not area_entities.intersection(include_entities)
+            )
             else MODE_INCLUDE,
         )
         labels_mode = self.hk_options.get(
             CONF_LABELS_INCLUSION_MODE,
             MODE_EXCLUDE
-            if label_entities
-            and label_entities.issubset(exclude_entities)
-            and not label_entities.intersection(include_entities)
+            if not label_entities
+            or (
+                label_entities.issubset(exclude_entities)
+                and not label_entities.intersection(include_entities)
+            )
             else MODE_INCLUDE,
         )
         return self.async_show_form(
