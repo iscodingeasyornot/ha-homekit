@@ -9,15 +9,30 @@
                 "title": "Pair HomeKit"
             },
             "user": {
-                "data": {
-                    "areas": "Areas",
-                    "areas_inclusion_mode": "Areas inclusion mode",
-                    "domains_inclusion_mode": "Domains inclusion mode",
-                    "include_domains": "Domains",
-                    "labels": "Labels",
-                    "labels_inclusion_mode": "Labels inclusion mode"
-                },
                 "description": "Choose Include or Exclude independently for domains, areas, and labels. The selector immediately below each inclusion mode belongs to that mode. A separate HomeKit instance in accessory mode will be created for each tv/receiver media player, activity based remote, lock, and camera.",
+                "sections": {
+                    "area_filter": {
+                        "data": {
+                            "areas": "Areas",
+                            "areas_inclusion_mode": "Inclusion mode"
+                        },
+                        "name": "Areas"
+                    },
+                    "domain_filter": {
+                        "data": {
+                            "domains_inclusion_mode": "Inclusion mode",
+                            "include_domains": "Domains"
+                        },
+                        "name": "Domains"
+                    },
+                    "label_filter": {
+                        "data": {
+                            "labels": "Labels",
+                            "labels_inclusion_mode": "Inclusion mode"
+                        },
+                        "name": "Labels"
+                    }
+                },
                 "title": "Select bridge filters"
             }
         }

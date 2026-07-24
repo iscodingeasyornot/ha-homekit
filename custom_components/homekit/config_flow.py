@@ -37,6 +37,7 @@ from homeassistant.const import (
     CONF_TYPE,
 )
 from homeassistant.core import HomeAssistant, callback, split_entity_id
+from homeassistant.data_entry_flow import section
 from homeassistant.helpers import (
     area_registry as ar,
     config_validation as cv,
@@ -45,11 +46,11 @@ from homeassistant.helpers import (
     label_registry as lr,
     selector,
 )
+from homeassistant.helpers.entityfilter import generate_filter
 from homeassistant.helpers.target import (
     TargetSelection,
     async_extract_referenced_entity_ids,
 )
-from homeassistant.helpers.entityfilter import generate_filter
 from homeassistant.loader import async_get_integrations
 
 from .const import (
@@ -83,6 +84,9 @@ from .util import async_find_next_available_port, state_needs_accessory_mode
 CONF_CAMERA_AUDIO = "camera_audio"
 CONF_CAMERA_COPY = "camera_copy"
 CONF_INCLUDE_EXCLUDE_MODE = "include_exclude_mode"
+SECTION_AREA_FILTER = "area_filter"
+SECTION_DOMAIN_FILTER = "domain_filter"
+SECTION_LABEL_FILTER = "label_filter"
 
 CLIMATE_TYPE_AUTOMATIC = "automatic"
 # Display names for the accessory classes a climate entity can use
@@ -398,11 +402,16 @@ class HomeKitConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Choose specific domains in bridge mode."""
         if user_input is not None:
-            domains = user_input[CONF_INCLUDE_DOMAINS]
-            domains_mode = user_input[CONF_DOMAINS_INCLUSION_MODE]
-            areas_mode = user_input[CONF_AREAS_INCLUSION_MODE]
-            labels_mode = user_input[CONF_LABELS_INCLUSION_MODE]
-            areas, labels = _async_store_area_label_selection(self.hk_data, user_input)
+            domain_filter = user_input[SECTION_DOMAIN_FILTER]
+            area_filter = user_input[SECTION_AREA_FILTER]
+            label_filter = user_input[SECTION_LABEL_FILTER]
+            domains = domain_filter[CONF_INCLUDE_DOMAINS]
+            domains_mode = domain_filter[CONF_DOMAINS_INCLUSION_MODE]
+            areas_mode = area_filter[CONF_AREAS_INCLUSION_MODE]
+            labels_mode = label_filter[CONF_LABELS_INCLUSION_MODE]
+            areas, labels = _async_store_area_label_selection(
+                self.hk_data, area_filter | label_filter
+            )
             _async_store_selected_entities(self.hk_data, domains, [], areas, labels)
             self.hk_data.update(
                 {
@@ -432,23 +441,42 @@ class HomeKitConfigFlow(ConfigFlow, domain=DOMAIN):
             step_id="user",
             data_schema=vol.Schema(
                 {
-                    vol.Required(
-                        CONF_DOMAINS_INCLUSION_MODE, default=MODE_EXCLUDE
-                    ): vol.In(INCLUDE_EXCLUDE_MODES),
-                    vol.Required(
-                        CONF_INCLUDE_DOMAINS, default=default_domains
-                    ): cv.multi_select(name_to_type_map),
-                    vol.Required(
-                        CONF_AREAS_INCLUSION_MODE, default=MODE_EXCLUDE
-                    ): vol.In(INCLUDE_EXCLUDE_MODES),
-                    vol.Optional(CONF_AREAS): cv.multi_select(
-                        _async_area_choices(self.hass)
+                    vol.Required(SECTION_DOMAIN_FILTER): section(
+                        vol.Schema(
+                            {
+                                vol.Required(
+                                    CONF_DOMAINS_INCLUSION_MODE,
+                                    default=MODE_EXCLUDE,
+                                ): vol.In(INCLUDE_EXCLUDE_MODES),
+                                vol.Required(
+                                    CONF_INCLUDE_DOMAINS, default=default_domains
+                                ): cv.multi_select(name_to_type_map),
+                            }
+                        )
                     ),
-                    vol.Required(
-                        CONF_LABELS_INCLUSION_MODE, default=MODE_EXCLUDE
-                    ): vol.In(INCLUDE_EXCLUDE_MODES),
-                    vol.Optional(CONF_LABELS): cv.multi_select(
-                        _async_label_choices(self.hass)
+                    vol.Required(SECTION_AREA_FILTER): section(
+                        vol.Schema(
+                            {
+                                vol.Required(
+                                    CONF_AREAS_INCLUSION_MODE, default=MODE_EXCLUDE
+                                ): vol.In(INCLUDE_EXCLUDE_MODES),
+                                vol.Optional(CONF_AREAS): cv.multi_select(
+                                    _async_area_choices(self.hass)
+                                ),
+                            }
+                        )
+                    ),
+                    vol.Required(SECTION_LABEL_FILTER): section(
+                        vol.Schema(
+                            {
+                                vol.Required(
+                                    CONF_LABELS_INCLUSION_MODE, default=MODE_EXCLUDE
+                                ): vol.In(INCLUDE_EXCLUDE_MODES),
+                                vol.Optional(CONF_LABELS): cv.multi_select(
+                                    _async_label_choices(self.hass)
+                                ),
+                            }
+                        )
                     ),
                 }
             ),
@@ -586,7 +614,7 @@ class HomeKitConfigFlow(ConfigFlow, domain=DOMAIN):
     @override
     def async_get_options_flow(
         config_entry: ConfigEntry,
-    ) -> OptionsFlowHandler:
+    ) -> "OptionsFlowHandler":
         """Get the options flow for this handler."""
         return OptionsFlowHandler()
 

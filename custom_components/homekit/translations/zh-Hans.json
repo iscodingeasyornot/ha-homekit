@@ -1,0 +1,33 @@
+{
+    "config": {
+        "step": {
+            "user": {
+                "description": "分别为域、区域和标签选择包含或排除。每个包含模式下方的选择框属于该模式。对于每个电视/接收器媒体播放器、基于活动的遥控器、门锁和摄像头，将以配件模式创建单独的 HomeKit 实例。",
+                "sections": {
+                    "area_filter": {
+                        "data": {
+                            "areas": "区域",
+                            "areas_inclusion_mode": "包含模式"
+                        },
+                        "name": "区域"
+                    },
+                    "domain_filter": {
+                        "data": {
+                            "domains_inclusion_mode": "包含模式",
+                            "include_domains": "域"
+                        },
+                        "name": "域"
+                    },
+                    "label_filter": {
+                        "data": {
+                            "labels": "标签",
+                            "labels_inclusion_mode": "包含模式"
+                        },
+                        "name": "标签"
+                    }
+                },
+                "title": "选择桥接筛选条件"
+            }
+        }
+    }
+}

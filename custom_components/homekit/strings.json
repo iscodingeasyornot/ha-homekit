@@ -9,15 +9,30 @@
         "title": "Pair HomeKit"
       },
       "user": {
-        "data": {
-          "domains_inclusion_mode": "Domains inclusion mode",
-          "include_domains": "Domains",
-          "areas_inclusion_mode": "Areas inclusion mode",
-          "areas": "Areas",
-          "labels_inclusion_mode": "Labels inclusion mode",
-          "labels": "Labels"
-        },
         "description": "Choose Include or Exclude independently for domains, areas, and labels. The selector immediately below each inclusion mode belongs to that mode. A separate HomeKit instance in accessory mode will be created for each tv/receiver media player, activity based remote, lock, and camera.",
+        "sections": {
+          "domain_filter": {
+            "data": {
+              "domains_inclusion_mode": "Inclusion mode",
+              "include_domains": "Domains"
+            },
+            "name": "Domains"
+          },
+          "area_filter": {
+            "data": {
+              "areas_inclusion_mode": "Inclusion mode",
+              "areas": "Areas"
+            },
+            "name": "Areas"
+          },
+          "label_filter": {
+            "data": {
+              "labels_inclusion_mode": "Inclusion mode",
+              "labels": "Labels"
+            },
+            "name": "Labels"
+          }
+        },
         "title": "Select bridge filters"
       }
     }
@@ -65,11 +80,11 @@
       },
       "init": {
         "data": {
-          "domains_inclusion_mode": "[%key:component::homekit::config::step::user::data::domains_inclusion_mode%]",
+          "domains_inclusion_mode": "Domains inclusion mode",
           "domains": "Domains",
-          "areas_inclusion_mode": "[%key:component::homekit::config::step::user::data::areas_inclusion_mode%]",
+          "areas_inclusion_mode": "Areas inclusion mode",
           "areas": "Areas",
-          "labels_inclusion_mode": "[%key:component::homekit::config::step::user::data::labels_inclusion_mode%]",
+          "labels_inclusion_mode": "Labels inclusion mode",
           "labels": "Labels",
           "mode": "HomeKit mode"
         },
