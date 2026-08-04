@@ -258,12 +258,50 @@ def _async_build_independent_filter(
     label_entities = _async_expand_area_label_entities(
         hass, SUPPORTED_DOMAINS, [], labels
     )
-    for mode, matching_entities in (
-        (areas_mode, area_entities),
-        (labels_mode, label_entities),
+    include_target_groups = [
+        set(matching_entities)
+        for selections, mode, matching_entities in (
+            (areas, areas_mode, area_entities),
+            (labels, labels_mode, label_entities),
+        )
+        if selections and mode == MODE_INCLUDE
+    ]
+    for selections, mode, matching_entities in (
+        (areas, areas_mode, area_entities),
+        (labels, labels_mode, label_entities),
     ):
-        target = include_entities if mode == MODE_INCLUDE else exclude_entities
-        target.extend(matching_entities)
+        if selections and mode == MODE_EXCLUDE:
+            exclude_entities.extend(matching_entities)
+
+    # Entity filters combine include_domains and include_entities with OR.  That
+    # is correct within the domain selector (explicit entities narrow only their
+    # own domains), but independent area/label Include selectors must narrow the
+    # result with AND. Expand the domain selector to entities when an additional
+    # Include group is active so the intersection can be represented.
+    if include_target_groups:
+        domain_filter = _async_build_entities_filter(domains, entities)
+        domain_is_included = generate_filter(
+            domain_filter[CONF_INCLUDE_DOMAINS]
+            if domains_mode == MODE_INCLUDE
+            else [],
+            domain_filter[CONF_INCLUDE_ENTITIES]
+            if domains_mode == MODE_INCLUDE
+            else [],
+            domains if domains_mode == MODE_EXCLUDE else [],
+            entities if domains_mode == MODE_EXCLUDE else [],
+        )
+        include_entities_set = set(
+            _async_get_matching_entities(hass, SUPPORTED_DOMAINS)
+        )
+        include_entities_set = {
+            entity_id
+            for entity_id in include_entities_set
+            if domain_is_included(entity_id)
+        }
+        for target_group in include_target_groups:
+            include_entities_set.intersection_update(target_group)
+        include_domains = []
+        include_entities = sorted(include_entities_set)
 
     exclude_entities = sorted(set(exclude_entities))
     # A matching exclusion wins when an entity is selected by more than one
